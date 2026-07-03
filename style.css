@@ -62,6 +62,53 @@ body {
 #load-btn:hover:not(:disabled) { background: var(--teal-dark); }
 #load-btn:disabled { opacity: 0.6; cursor: default; }
 
+#save-fav-btn {
+  background: white;
+  color: var(--teal);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#save-fav-btn:hover { background: var(--bg); }
+
+.favorites-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.fav-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #eef6f6;
+  color: var(--teal-dark);
+  border: 1px solid #d5e9e9;
+  border-radius: 20px;
+  padding: 5px 8px 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fav-chip:hover { background: #e2f0f0; }
+.fav-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+.fav-remove:hover { background: rgba(0,0,0,0.08); color: var(--text); }
+.fav-empty { font-size: 0.82rem; color: var(--text-muted); }
+
 .progress-wrap {
   height: 6px;
   background: var(--border);
@@ -175,6 +222,7 @@ select, input[type="number"], input[type="text"] {
 .card-address { font-size: 0.92rem; font-weight: 600; margin-top: 2px; }
 .card-citystate { font-size: 0.82rem; color: var(--text-muted); }
 .card-stats { font-size: 0.85rem; color: var(--text-muted); margin: 6px 0 4px; }
+.card-dom { font-size: 0.76rem; color: var(--teal); font-weight: 600; margin-bottom: 2px; }
 
 .card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .badge {

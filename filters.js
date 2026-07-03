@@ -90,6 +90,22 @@ function isCondoLike(property) {
   return CONDO_SUBTYPE_PATTERN.test(property.PropertySubType || '');
 }
 
+function daysSince(dateStr) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+/** Number of days on market, or null if it can't be determined. */
+function deriveDaysOnMarket(property) {
+  if (!property) return null;
+  const dom = num(property.DaysOnMarket);
+  if (dom !== null) return dom;
+  if (property.ListingContractDate) return daysSince(property.ListingContractDate);
+  if (property.ActivationDate) return daysSince(property.ActivationDate);
+  return null;
+}
+
 /** Merges a summary listing + its detail fetch into one flat record the UI renders from. */
 function buildListingRecord(summary, detail) {
   const summaryProp = summary.property || {};
@@ -131,6 +147,7 @@ function buildListingRecord(summary, detail) {
     petsAllowed: merged.PetsAllowed,
     availabilityDate: merged.AvailabilityDate,
     remarks: merged.PublicRemarks,
+    daysOnMarket: deriveDaysOnMarket(merged),
     isCondo: isCondoLike(merged),
     waterStatus: deriveWaterStatus(merged),
     parkingStatus: deriveParkingStatus(merged),

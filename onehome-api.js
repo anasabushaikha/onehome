@@ -42,19 +42,38 @@ const LISTING_DETAIL_QUERY = `query ListingById($listingId: String!, $groupId: S
       ParkingTotal ParkingFeatures CarportYN CarportSpaces GarageYN GarageSpaces AttachedGarageYN CoveredSpaces
       LaundryFeatures AssociationFeeIncludes AssociationFee AssociationFeeFrequency
       RentIncludes TenantPays OwnerPays PetsAllowed Furnished LeaseTerm AvailabilityDate
-      Utilities WaterSource PublicRemarks
+      Utilities WaterSource PublicRemarks DaysOnMarket ListingContractDate
       __typename
     }
     __typename
   }
 }`;
 
-/** Extracts the OneHome share id from a pasted URL or raw id string. */
-function parseShareId(input) {
+/**
+ * Parses a pasted OneHome URL into either a share id (from /share/{id} links,
+ * which need a checkShare lookup) or a token (from /properties?token=... style
+ * links, which embed the emailToken directly and skip that lookup).
+ */
+function parseOneHomeLink(input) {
   const trimmed = (input || '').trim();
-  const match = trimmed.match(/share\/([A-Za-z0-9]+)/i);
-  if (match) return match[1];
-  if (/^[A-Za-z0-9]+$/.test(trimmed)) return trimmed;
+
+  let url = null;
+  try {
+    url = new URL(trimmed);
+  } catch (e) {
+    // not a full URL - fall through to the raw-id checks below
+  }
+
+  if (url) {
+    const token = url.searchParams.get('token');
+    if (token) return { type: 'token', token };
+  }
+
+  const shareMatch = trimmed.match(/share\/([A-Za-z0-9]+)/i);
+  if (shareMatch) return { type: 'share', shareId: shareMatch[1] };
+
+  if (/^[A-Za-z0-9]+$/.test(trimmed)) return { type: 'share', shareId: trimmed };
+
   return null;
 }
 
@@ -76,25 +95,36 @@ async function gqlFetch(operationName, variables, query, sessionToken) {
   return json.data;
 }
 
-/** Step 1+2: exchange a share id for a session token + saved search id + a reusable "portal token". */
-async function authenticateShare(shareId) {
-  const shareRes = await fetch(`${ONEHOME_SERVICES}/api/authentication/checkShare/${encodeURIComponent(shareId)}`, {
-    headers: { accept: 'application/json', 'content-type': 'application/json' },
-  });
-  if (!shareRes.ok) {
-    throw new Error(shareRes.status === 404
-      ? 'That share link was not found. Double-check the URL your agent sent you.'
-      : `Could not reach OneHome (HTTP ${shareRes.status}).`);
+/**
+ * Exchanges a parsed link (see parseOneHomeLink) for a session token + saved
+ * search id + a reusable "portal token". /share/ links need an extra checkShare
+ * lookup first to get the emailToken; /properties?token= links already have it.
+ */
+async function authenticateFromLink(parsed) {
+  let emailToken;
+
+  if (parsed.type === 'token') {
+    emailToken = parsed.token;
+  } else {
+    const shareRes = await fetch(`${ONEHOME_SERVICES}/api/authentication/checkShare/${encodeURIComponent(parsed.shareId)}`, {
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+    });
+    if (!shareRes.ok) {
+      throw new Error(shareRes.status === 404
+        ? 'That share link was not found. Double-check the URL your agent sent you.'
+        : `Could not reach OneHome (HTTP ${shareRes.status}).`);
+    }
+    const shareData = await shareRes.json();
+    emailToken = shareData.emailToken;
+    if (!emailToken) throw new Error('OneHome did not return a valid share token for this link.');
   }
-  const { emailToken } = await shareRes.json();
-  if (!emailToken) throw new Error('OneHome did not return a valid share token for this link.');
 
   const tokenRes = await fetch(`${ONEHOME_SERVICES}/api/authentication/checkToken`, {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json' },
     body: JSON.stringify({ emailToken }),
   });
-  if (!tokenRes.ok) throw new Error('This share link appears to have expired.');
+  if (!tokenRes.ok) throw new Error('This link appears to have expired.');
   const tokenData = await tokenRes.json();
   if (!tokenData.sessionToken || !tokenData.savedSearchID) {
     throw new Error('OneHome did not return session details for this link.');
@@ -179,8 +209,8 @@ function buildPortalUrl(auth, listingId) {
 }
 
 window.OneHomeAPI = {
-  parseShareId,
-  authenticateShare,
+  parseOneHomeLink,
+  authenticateFromLink,
   fetchListingIds,
   fetchListingSummaries,
   fetchAllDetails,

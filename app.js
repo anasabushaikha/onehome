@@ -1,5 +1,5 @@
 (function () {
-  const { parseShareId, authenticateShare, fetchListingIds, fetchListingSummaries, fetchAllDetails, buildPortalUrl } = window.OneHomeAPI;
+  const { parseOneHomeLink, authenticateFromLink, fetchListingIds, fetchListingSummaries, fetchAllDetails, buildPortalUrl } = window.OneHomeAPI;
   const { buildListingRecord } = window.OneHomeFilters;
 
   const els = {
@@ -25,6 +25,8 @@
     resetBtn: document.getElementById('reset-filters'),
     errorBox: document.getElementById('error-box'),
     searchMeta: document.getElementById('search-meta'),
+    saveFavBtn: document.getElementById('save-fav-btn'),
+    favoritesRow: document.getElementById('favorites-row'),
   };
 
   let state = {
@@ -34,6 +36,81 @@
   };
 
   const LAST_URL_KEY = 'onehome-filter:last-url';
+  const FAVORITES_KEY = 'onehome-filter:favorites';
+  const DEFAULT_FAVORITES = [
+    {
+      label: 'My OneHome Properties',
+      url: 'https://portal.onehome.com/en-CA/properties?token=eyJPU04iOiJJVFNPIiwidHlwZSI6IjEiLCJjb250YWN0aWQiOjg1NTkxMTAsInNldGlkIjoiMTI3MDI0NCIsInNldGtleSI6IjQ2MiIsImVtYWlsIjoiYW5hcy5hYnVzaGFpa2hhQG91dGxvb2suY29tIiwicmVzb3VyY2VpZCI6MCwiYWdlbnRpZCI6MTI0ODM5LCJpc2RlbHRhIjpmYWxzZSwiVmlld01vZGUiOiIxIn0=&SMS=0',
+    },
+  ];
+
+  function loadFavorites() {
+    try {
+      const raw = localStorage.getItem(FAVORITES_KEY);
+      if (raw === null) {
+        localStorage.setItem(FAVORITES_KEY, JSON.stringify(DEFAULT_FAVORITES));
+        return [...DEFAULT_FAVORITES];
+      }
+      return JSON.parse(raw);
+    } catch (e) {
+      return [...DEFAULT_FAVORITES];
+    }
+  }
+
+  function saveFavoritesList(list) {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+  }
+
+  function renderFavorites() {
+    const favorites = loadFavorites();
+    els.favoritesRow.innerHTML = favorites.length
+      ? favorites
+          .map(
+            (f, i) => `
+        <button type="button" class="fav-chip" data-index="${i}">
+          <span class="fav-label">${escapeHtml(f.label)}</span>
+          <span class="fav-remove" data-remove-index="${i}" title="Remove">×</span>
+        </button>`
+          )
+          .join('')
+      : '<span class="fav-empty">No saved links yet — click ☆ Save to add this one.</span>';
+
+    els.favoritesRow.querySelectorAll('.fav-remove').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const idx = Number(btn.dataset.removeIndex);
+        const favorites = loadFavorites();
+        favorites.splice(idx, 1);
+        saveFavoritesList(favorites);
+        renderFavorites();
+      });
+    });
+
+    els.favoritesRow.querySelectorAll('.fav-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const idx = Number(chip.dataset.index);
+        const fav = loadFavorites()[idx];
+        if (fav) {
+          els.input.value = fav.url;
+          loadFromShareUrl(fav.url);
+        }
+      });
+    });
+  }
+
+  function saveCurrentAsFavorite() {
+    const url = els.input.value.trim();
+    if (!url) {
+      showError('Paste a link first, then save it.');
+      return;
+    }
+    const label = window.prompt('Name this saved search:', 'My Search');
+    if (label === null) return;
+    const favorites = loadFavorites();
+    favorites.push({ label: label.trim() || 'Saved search', url });
+    saveFavoritesList(favorites);
+    renderFavorites();
+  }
 
   function setStatus(text) {
     els.status.textContent = text || '';
@@ -64,9 +141,9 @@
 
   async function loadFromShareUrl(rawInput) {
     showError('');
-    const shareId = parseShareId(rawInput);
-    if (!shareId) {
-      showError('Could not find a share ID in that link. Paste the full link your agent sent you (e.g. https://portal.onehome.com/en-CA/share/XXXXXXX).');
+    const parsed = parseOneHomeLink(rawInput);
+    if (!parsed) {
+      showError('Could not read that link. Paste a full OneHome link your agent sent you (e.g. https://portal.onehome.com/en-CA/share/XXXXXXX or .../properties?token=...).');
       return;
     }
 
@@ -77,12 +154,12 @@
 
     try {
       setStatus('Authenticating with OneHome…');
-      const auth = await authenticateShare(shareId);
+      const auth = await authenticateFromLink(parsed);
 
       setStatus('Fetching listing IDs…');
       const listingIds = await fetchListingIds(auth);
       if (!listingIds.length) {
-        showError('This share link has no listings on it.');
+        showError('This link has no listings on it.');
         setLoading(false);
         return;
       }
@@ -110,7 +187,7 @@
       applyFiltersAndRender();
     } catch (err) {
       console.error(err);
-      showError(err.message || 'Something went wrong loading this share link.');
+      showError(err.message || 'Something went wrong loading this link.');
       setStatus('');
     } finally {
       setLoading(false);
@@ -182,6 +259,13 @@
     els.results.innerHTML = filtered.map(renderCard).join('') || '<p class="empty-state">No listings match these filters.</p>';
   }
 
+  function formatDaysOnMarket(days) {
+    if (days === null || days === undefined) return null;
+    if (days <= 0) return 'Listed today';
+    if (days === 1) return '1 day on market';
+    return `${days} days on market`;
+  }
+
   function renderCard(listing) {
     const portalUrl = state.auth ? buildPortalUrl(state.auth, listing.id) : '#';
     const img = listing.imageUrl
@@ -190,6 +274,7 @@
     const statusPill = listing.status && listing.status !== 'Active'
       ? `<span class="status-pill">${escapeHtml(listing.status)}</span>`
       : '';
+    const domText = formatDaysOnMarket(listing.daysOnMarket);
 
     return `
       <article class="card">
@@ -204,6 +289,7 @@
             ${listing.baths !== null && listing.baths !== undefined ? `${listing.baths} ba` : '—'} ·
             ${listing.livingArea ? `${listing.livingArea} ${listing.livingAreaUnits || 'sqft'}` : 'sqft n/a'}
           </div>
+          ${domText ? `<div class="card-dom">${escapeHtml(domText)}</div>` : ''}
           <div class="card-badges">
             ${badge('Condo', listing.isCondo ? 'yes' : 'no')}
             ${badge('Water', listing.waterStatus)}
@@ -246,6 +332,7 @@
   );
   [els.priceMin, els.priceMax, els.bedsMin].forEach(el => el.addEventListener('input', debounce(applyFiltersAndRender, 300)));
   els.resetBtn.addEventListener('click', resetFilters);
+  els.saveFavBtn.addEventListener('click', saveCurrentAsFavorite);
 
   function debounce(fn, ms) {
     let t;
@@ -258,4 +345,6 @@
   // Prefill with the last-used share link for convenience.
   const lastUrl = localStorage.getItem(LAST_URL_KEY);
   if (lastUrl) els.input.value = lastUrl;
+
+  renderFavorites();
 })();

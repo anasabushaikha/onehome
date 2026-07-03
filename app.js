@@ -22,6 +22,8 @@
     priceMin: document.getElementById('price-min'),
     priceMax: document.getElementById('price-max'),
     bedsMin: document.getElementById('beds-min'),
+    domSlider: document.getElementById('dom-slider'),
+    domSliderLabel: document.getElementById('dom-slider-label'),
     resetBtn: document.getElementById('reset-filters'),
     errorBox: document.getElementById('error-box'),
     searchMeta: document.getElementById('search-meta'),
@@ -213,6 +215,16 @@
       els.priceMin.placeholder = `Min (e.g. ${Math.min(...prices)})`;
       els.priceMax.placeholder = `Max (e.g. ${Math.max(...prices)})`;
     }
+
+    const domValues = state.listings.map(l => l.daysOnMarket).filter(d => typeof d === 'number');
+    const maxDom = domValues.length ? Math.max(...domValues) : 0;
+    els.domSlider.max = String(maxDom);
+    els.domSlider.value = String(maxDom);
+    updateDomSliderLabel(maxDom, maxDom);
+  }
+
+  function updateDomSliderLabel(value, max) {
+    els.domSliderLabel.textContent = value >= max ? 'Any' : `${value} day${value === 1 ? '' : 's'} or less`;
   }
 
   function currentFilters() {
@@ -227,6 +239,8 @@
       priceMin: els.priceMin.value ? Number(els.priceMin.value) : null,
       priceMax: els.priceMax.value ? Number(els.priceMax.value) : null,
       bedsMin: els.bedsMin.value ? Number(els.bedsMin.value) : null,
+      domMax: Number(els.domSlider.value),
+      domAtMax: Number(els.domSlider.value) >= Number(els.domSlider.max),
     };
   }
 
@@ -240,6 +254,7 @@
     if (f.priceMin !== null && (listing.listPrice === null || listing.listPrice < f.priceMin)) return false;
     if (f.priceMax !== null && (listing.listPrice === null || listing.listPrice > f.priceMax)) return false;
     if (f.bedsMin !== null && (listing.beds === null || listing.beds < f.bedsMin)) return false;
+    if (!f.domAtMax && (listing.daysOnMarket === null || listing.daysOnMarket === undefined || listing.daysOnMarket > f.domMax)) return false;
     return true;
   }
 
@@ -318,6 +333,8 @@
     els.priceMin.value = '';
     els.priceMax.value = '';
     els.bedsMin.value = '';
+    els.domSlider.value = els.domSlider.max;
+    updateDomSliderLabel(Number(els.domSlider.value), Number(els.domSlider.max));
     els.sortSelect.value = 'newest';
     applyFiltersAndRender();
   }
@@ -331,6 +348,11 @@
     el.addEventListener('change', applyFiltersAndRender)
   );
   [els.priceMin, els.priceMax, els.bedsMin].forEach(el => el.addEventListener('input', debounce(applyFiltersAndRender, 300)));
+  const debouncedApplyFilters = debounce(applyFiltersAndRender, 80);
+  els.domSlider.addEventListener('input', () => {
+    updateDomSliderLabel(Number(els.domSlider.value), Number(els.domSlider.max));
+    debouncedApplyFilters();
+  });
   els.resetBtn.addEventListener('click', resetFilters);
   els.saveFavBtn.addEventListener('click', saveCurrentAsFavorite);
 

@@ -163,6 +163,13 @@ select, input[type="number"], input[type="text"] {
 .price-row { display: flex; align-items: center; gap: 8px; }
 .price-row span { color: var(--text-muted); }
 
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--teal);
+  margin: 4px 0;
+}
+.range-label { font-size: 0.82rem; color: var(--text-muted); text-align: right; }
+
 .reset-btn {
   width: 100%;
   padding: 9px;
